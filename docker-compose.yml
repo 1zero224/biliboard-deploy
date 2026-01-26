@@ -1,0 +1,146 @@
+# Biliboard Production Deployment
+# Usage: docker-compose up -d
+
+services:
+  # ============================================
+  # Backend API Service
+  # ============================================
+  backend:
+    build:
+      context: ./Biliboard-backend
+      dockerfile: Dockerfile
+    container_name: biliboard-backend
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=sqlite:///app/data/prod.db
+      - RUST_LOG=info
+      - MQTT_HOST=${MQTT_HOST:-emqx.digiplc.cn}
+      - MQTT_PORT=${MQTT_PORT:-1883}
+      - UPLOADS_DIR=/app/static/uploads
+    volumes:
+      - backend-data:/app/data
+      - backend-uploads:/app/static/uploads
+      - backend-config:/app/config
+    networks:
+      - biliboard-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5800/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "prometheus.scrape=true"
+      - "prometheus.port=5800"
+      - "prometheus.path=/metrics"
+
+  # ============================================
+  # Frontend + Nginx Reverse Proxy
+  # ============================================
+  frontend:
+    build:
+      context: ./Biliboard-frontend
+      dockerfile: Dockerfile
+    container_name: biliboard-frontend
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./deploy/ssl:/etc/nginx/ssl:ro
+      - nginx-logs:/var/log/nginx
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - biliboard-net
+
+  # ============================================
+  # Prometheus - Metrics Collection
+  # ============================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: biliboard-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks:
+      - biliboard-net
+
+  # ============================================
+  # Grafana - Visualization & Dashboards
+  # ============================================
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: biliboard-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:3000}
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-piechart-panel
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - biliboard-net
+
+  # ============================================
+  # Node Exporter - Host Metrics (Optional)
+  # ============================================
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: biliboard-node-exporter
+    restart: unless-stopped
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks:
+      - biliboard-net
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  biliboard-net:
+    driver: bridge
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  backend-data:
+    driver: local
+  backend-uploads:
+    driver: local
+  backend-config:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  nginx-logs:
+    driver: local

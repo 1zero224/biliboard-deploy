@@ -1,0 +1,27 @@
+# Environment files (sensitive)
+.env
+.env.local
+.env.*.local
+
+# SSL certificates
+deploy/ssl/*.pem
+deploy/ssl/*.key
+deploy/ssl/*.crt
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Backup files
+*.bak
+*.backup
