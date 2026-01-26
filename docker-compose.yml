@@ -103,6 +103,28 @@ services:
       - biliboard-net
 
   # ============================================
+  # Database Backup Service
+  # ============================================
+  backup:
+    build:
+      context: ./deploy/backup
+      dockerfile: Dockerfile
+    container_name: biliboard-backup
+    restart: unless-stopped
+    environment:
+      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 */6 * * *}
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
+      - TZ=Asia/Shanghai
+    volumes:
+      - backend-data:/app/data:ro
+      - backup-data:/backups
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - biliboard-net
+
+  # ============================================
   # Node Exporter - Host Metrics (Optional)
   # ============================================
   node-exporter:
@@ -137,6 +159,8 @@ volumes:
   backend-uploads:
     driver: local
   backend-config:
+    driver: local
+  backup-data:
     driver: local
   prometheus-data:
     driver: local
