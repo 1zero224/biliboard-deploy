@@ -1,6 +1,6 @@
 [submodule "Biliboard-backend"]
 	path = Biliboard-backend
-	url = https://github.com/1zero224/Biliboard-backend.git
+	url = git@github.com:1zero224/Biliboard-backend.git
 [submodule "Biliboard-frontend"]
 	path = Biliboard-frontend
-	url = https://github.com/1zero224/Biliboard-frontend.git
+	url = git@github.com:1zero224/Biliboard-frontend.git
