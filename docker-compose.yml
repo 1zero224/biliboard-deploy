@@ -1,5 +1,6 @@
 # Biliboard Production Deployment
-# Usage: docker-compose up -d
+# Usage: DOCKER_BUILDKIT=1 docker-compose up -d --build
+# Fast rebuild: DOCKER_BUILDKIT=1 docker-compose build backend
 
 services:
   # ============================================
@@ -9,6 +10,10 @@ services:
     build:
       context: ./Biliboard-backend
       dockerfile: Dockerfile
+      # Remote sccache (optional, for ephemeral CI runners)
+      # Uncomment and set SCCACHE_REDIS_ENDPOINT to enable
+      args:
+        - SCCACHE_REDIS_ENDPOINT=${SCCACHE_REDIS_ENDPOINT:-}
     container_name: biliboard-backend
     restart: unless-stopped
     environment:
