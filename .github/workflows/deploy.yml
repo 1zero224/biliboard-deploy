@@ -1,0 +1,91 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.env.versions'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create GitHub Deployment
+        id: deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.sha,
+              environment: 'production',
+              auto_merge: false,
+              description: 'Deploying to production server'
+            });
+            return deployment.data.id;
+          result-encoding: string
+
+      - name: Update Deployment Status (in_progress)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: ${{ steps.deployment.outputs.result }},
+              state: 'in_progress',
+              description: 'Deployment in progress'
+            });
+
+      - name: Trigger Server Deployment (Async Webhook)
+        id: webhook
+        run: |
+          RESPONSE=$(curl -sf --max-time 30 -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
+            -d '{
+              "deployment_id": "${{ steps.deployment.outputs.result }}",
+              "commit_sha": "${{ github.sha }}"
+            }' \
+            "${{ secrets.DEPLOY_WEBHOOK_URL }}" 2>&1) || {
+              echo "Webhook request failed: $RESPONSE"
+              echo "status=failed" >> $GITHUB_OUTPUT
+              exit 1
+            }
+
+          echo "Webhook triggered: $RESPONSE"
+
+          if echo "$RESPONSE" | grep -q "accepted"; then
+            echo "status=accepted" >> $GITHUB_OUTPUT
+          else
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Update Deployment Status (pending)
+        if: steps.webhook.outputs.status == 'accepted'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: ${{ steps.deployment.outputs.result }},
+              state: 'pending',
+              description: 'Deployment accepted by server, executing...'
+            });

@@ -1,19 +1,12 @@
-# Biliboard Production Deployment
-# Usage: DOCKER_BUILDKIT=1 docker-compose up -d --build
-# Fast rebuild: DOCKER_BUILDKIT=1 docker-compose build backend
+# Biliboard Production Deployment (GHCR Version)
+# Usage: docker compose up -d
 
 services:
   # ============================================
   # Backend API Service
   # ============================================
   backend:
-    build:
-      context: ./Biliboard-backend
-      dockerfile: Dockerfile
-      # Remote sccache (optional, for ephemeral CI runners)
-      # Uncomment and set SCCACHE_REDIS_ENDPOINT to enable
-      args:
-        - SCCACHE_REDIS_ENDPOINT=${SCCACHE_REDIS_ENDPOINT:-}
+    image: ${BACKEND_REF}
     container_name: biliboard-backend
     restart: unless-stopped
     environment:
@@ -43,18 +36,16 @@ services:
   # Frontend + Nginx Reverse Proxy
   # ============================================
   frontend:
-    build:
-      context: ./Biliboard-frontend
-      dockerfile: Dockerfile
+    image: ${FRONTEND_REF}
     container_name: biliboard-frontend
     restart: unless-stopped
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
     volumes:
-      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./deploy/nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./deploy/ssl:/etc/nginx/ssl:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./ssl:/etc/nginx/ssl:ro
       - nginx-logs:/var/log/nginx
     depends_on:
       backend:
@@ -75,8 +66,8 @@ services:
       - '--storage.tsdb.retention.time=15d'
       - '--web.enable-lifecycle'
     volumes:
-      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./deploy/prometheus/rules:/etc/prometheus/rules:ro
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
     ports:
       - "${PROMETHEUS_PORT:-9090}:9090"
@@ -97,35 +88,13 @@ services:
       - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:3000}
       - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-piechart-panel
     volumes:
-      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
     depends_on:
       - prometheus
-    networks:
-      - biliboard-net
-
-  # ============================================
-  # Database Backup Service
-  # ============================================
-  backup:
-    build:
-      context: ./deploy/backup
-      dockerfile: Dockerfile
-    container_name: biliboard-backup
-    restart: unless-stopped
-    environment:
-      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 */6 * * *}
-      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
-      - TZ=Asia/Shanghai
-    volumes:
-      - backend-data:/app/data:ro
-      - backup-data:/backups
-    depends_on:
-      backend:
-        condition: service_healthy
     networks:
       - biliboard-net
 
@@ -164,8 +133,6 @@ volumes:
   backend-uploads:
     driver: local
   backend-config:
-    driver: local
-  backup-data:
     driver: local
   prometheus-data:
     driver: local

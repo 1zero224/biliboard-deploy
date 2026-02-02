@@ -1,0 +1,23 @@
+[
+  {
+    "id": "deploy",
+    "execute-command": "/opt/biliboard-deploy/scripts/deploy-webhook.sh",
+    "command-working-directory": "/opt/biliboard-deploy",
+    "pass-arguments-to-command": [
+      { "source": "payload", "name": "deployment_id" },
+      { "source": "payload", "name": "commit_sha" }
+    ],
+    "trigger-rule": {
+      "match": {
+        "type": "value",
+        "value": "REPLACE_WITH_YOUR_SECRET",
+        "parameter": {
+          "source": "header",
+          "name": "X-Webhook-Secret"
+        }
+      }
+    },
+    "response-message": "{\"status\":\"accepted\"}",
+    "http-methods": ["POST"]
+  }
+]
