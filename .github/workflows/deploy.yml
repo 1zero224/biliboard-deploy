@@ -35,6 +35,7 @@ jobs:
               ref: context.sha,
               environment: 'production',
               auto_merge: false,
+              required_contexts: [],
               description: 'Deploying to production server'
             });
             return deployment.data.id;
