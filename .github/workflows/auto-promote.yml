@@ -263,28 +263,27 @@ jobs:
 
           TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
 
-          BODY=$(cat <<EOF
-          ## Release Candidate
+          cat > /tmp/pr-body.md <<EOF
+## Release Candidate
 
-          This PR aggregates image updates from CI pipelines.
+This PR aggregates image updates from CI pipelines.
 
-          ### Current Image References
-          - **Backend**: \`${BACKEND_REF}\`
-          - **Frontend**: \`${FRONTEND_REF}\`
+### Current Image References
+- **Backend**: \`${BACKEND_REF}\`
+- **Frontend**: \`${FRONTEND_REF}\`
 
-          ### How it works
-          - Each CI build triggers an update to this PR
-          - Multiple updates are aggregated into a single PR
-          - Merge when ready to deploy to production
+### How it works
+- Each CI build triggers an update to this PR
+- Multiple updates are aggregated into a single PR
+- Merge when ready to deploy to production
 
-          ---
-          ⚠️ **After merge**, the Deploy workflow will run on the production runner with environment protection.
+---
+⚠️ **After merge**, the Deploy workflow will run on the production runner with environment protection.
 
-          _Last updated: ${TIMESTAMP}_
-          EOF
-          )
+_Last updated: ${TIMESTAMP}_
+EOF
 
-          gh pr edit "${{ steps.pr-check.outputs.pr_number }}" --body "${BODY}"
+          gh pr edit "${{ steps.pr-check.outputs.pr_number }}" --body-file /tmp/pr-body.md
 
           # Add comment for audit trail
           gh pr comment "${{ steps.pr-check.outputs.pr_number }}" \
