@@ -179,8 +179,8 @@ Promotion PR 合并后：
 - 确认 `HTTP_PORT`（默认 80）是否与你实际对外端口一致
 - 检查 Nginx/后端容器状态：
   - `docker ps`
-  - `docker logs "biliboard-backend"`
-  - `docker logs "biliboard-frontend"`
+  - `docker compose logs backend`
+  - `docker compose logs frontend`
 
 ---
 

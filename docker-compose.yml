@@ -7,7 +7,6 @@ services:
   # ============================================
   backend:
     image: ${BACKEND_REF}
-    container_name: biliboard-backend
     restart: unless-stopped
     environment:
       - DATABASE_URL=sqlite:///app/data/prod.db
@@ -28,16 +27,17 @@ services:
       retries: 3
       start_period: 40s
     labels:
-      - "prometheus.scrape=true"
-      - "prometheus.port=5800"
-      - "prometheus.path=/metrics"
+      com.biliboard.project: "true"
+      com.biliboard.service: "backend"
+      prometheus.scrape: "true"
+      prometheus.port: "5800"
+      prometheus.path: "/metrics"
 
   # ============================================
   # Frontend + Nginx Reverse Proxy
   # ============================================
   frontend:
     image: ${FRONTEND_REF}
-    container_name: biliboard-frontend
     restart: unless-stopped
     extra_hosts:
         - "host.docker.internal:host-gateway"
@@ -54,13 +54,15 @@ services:
         condition: service_healthy
     networks:
       - biliboard-net
+    labels:
+      com.biliboard.project: "true"
+      com.biliboard.service: "frontend"
 
   # ============================================
   # Prometheus - Metrics Collection
   # ============================================
   prometheus:
     image: prom/prometheus:v2.48.0
-    container_name: biliboard-prometheus
     restart: unless-stopped
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -75,13 +77,15 @@ services:
       - "${PROMETHEUS_PORT:-9090}:9090"
     networks:
       - biliboard-net
+    labels:
+      com.biliboard.project: "true"
+      com.biliboard.service: "prometheus"
 
   # ============================================
   # Grafana - Visualization & Dashboards
   # ============================================
   grafana:
     image: grafana/grafana:10.2.2
-    container_name: biliboard-grafana
     restart: unless-stopped
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
@@ -99,13 +103,15 @@ services:
       - prometheus
     networks:
       - biliboard-net
+    labels:
+      com.biliboard.project: "true"
+      com.biliboard.service: "grafana"
 
   # ============================================
   # Database Backup Service
   # ============================================
   backup:
     image: alpine:3.19
-    container_name: biliboard-backup
     restart: unless-stopped
     entrypoint: /bin/sh
     command:
@@ -127,13 +133,15 @@ services:
         condition: service_healthy
     networks:
       - biliboard-net
+    labels:
+      com.biliboard.project: "true"
+      com.biliboard.service: "backup"
 
   # ============================================
   # Node Exporter - Host Metrics (Optional)
   # ============================================
   node-exporter:
     image: prom/node-exporter:v1.7.0
-    container_name: biliboard-node-exporter
     restart: unless-stopped
     command:
       - '--path.procfs=/host/proc'
@@ -146,6 +154,9 @@ services:
       - /:/rootfs:ro
     networks:
       - biliboard-net
+    labels:
+      com.biliboard.project: "true"
+      com.biliboard.service: "node-exporter"
 
 # ============================================
 # Networks

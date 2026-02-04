@@ -4,9 +4,12 @@
 
 set -e
 
-BACKUP_CONTAINER="biliboard-backup"
-BACKUP_VOLUME="biliboard_backup-data"
 COMPOSE_DIR="${COMPOSE_DIR:-/home/deploy/_work/biliboard-deploy/biliboard-deploy}"
+COMPOSE_PROJECT="${COMPOSE_PROJECT_NAME:-biliboard}"
+
+get_backup_container() {
+    docker ps -q -f "label=com.biliboard.service=backup" | head -1
+}
 
 show_help() {
     echo "Biliboard Backup Manager"
@@ -27,18 +30,37 @@ show_help() {
 }
 
 backup_now() {
+    local container
+    container=$(get_backup_container)
+    if [ -z "$container" ]; then
+        echo "Error: Backup container not found"
+        exit 1
+    fi
     echo "Running backup now..."
-    docker exec ${BACKUP_CONTAINER} /usr/local/bin/backup.sh
+    docker exec "$container" /scripts/backup.sh
 }
 
 list_backups() {
+    local container
+    container=$(get_backup_container)
+    if [ -z "$container" ]; then
+        echo "Error: Backup container not found"
+        exit 1
+    fi
     echo "Available backups:"
-    docker exec ${BACKUP_CONTAINER} ls -lh /backups/ 2>/dev/null || echo "No backups found"
+    docker exec "$container" ls -lh /backups/ 2>/dev/null || echo "No backups found"
 }
 
 restore_backup() {
+    local container
+    container=$(get_backup_container)
+    if [ -z "$container" ]; then
+        echo "Error: Backup container not found"
+        exit 1
+    fi
+
     echo "Available backups:"
-    docker exec ${BACKUP_CONTAINER} ls -1 /backups/biliboard_*.db.gz 2>/dev/null | nl
+    docker exec "$container" ls -1 /backups/biliboard_*.db.gz 2>/dev/null | nl
     echo ""
     read -p "Enter backup filename to restore (e.g., biliboard_20240101_120000.db.gz): " BACKUP_FILE
 
@@ -65,10 +87,10 @@ restore_backup() {
     docker compose stop backend
 
     echo "Creating pre-restore backup..."
-    docker exec ${BACKUP_CONTAINER} cp /app/data/prod.db /backups/pre_restore_$(date +%Y%m%d_%H%M%S).db 2>/dev/null || true
+    docker exec "$container" cp /app/data/prod.db /backups/pre_restore_$(date +%Y%m%d_%H%M%S).db 2>/dev/null || true
 
     echo "Restoring from ${BACKUP_FILE}..."
-    docker exec ${BACKUP_CONTAINER} sh -c "gunzip -c /backups/${BACKUP_FILE} > /tmp/restore.db && cp /tmp/restore.db /app/data/prod.db"
+    docker exec "$container" sh -c "gunzip -c /backups/${BACKUP_FILE} > /tmp/restore.db && cp /tmp/restore.db /app/data/prod.db"
 
     echo "Starting backend service..."
     docker compose start backend
@@ -77,8 +99,15 @@ restore_backup() {
 }
 
 download_backup() {
+    local container
+    container=$(get_backup_container)
+    if [ -z "$container" ]; then
+        echo "Error: Backup container not found"
+        exit 1
+    fi
+
     echo "Available backups:"
-    docker exec ${BACKUP_CONTAINER} ls -1 /backups/biliboard_*.db.gz 2>/dev/null | nl
+    docker exec "$container" ls -1 /backups/biliboard_*.db.gz 2>/dev/null | nl
     echo ""
     read -p "Enter backup filename to download: " BACKUP_FILE
 
@@ -89,26 +118,41 @@ download_backup() {
 
     LOCAL_PATH="./backups/${BACKUP_FILE}"
     mkdir -p ./backups
-    docker cp ${BACKUP_CONTAINER}:/backups/${BACKUP_FILE} ${LOCAL_PATH}
+    docker cp "$container:/backups/${BACKUP_FILE}" "${LOCAL_PATH}"
     echo "Downloaded to: ${LOCAL_PATH}"
 }
 
 show_status() {
+    local container
+    container=$(get_backup_container)
+
     cd "${COMPOSE_DIR}"
     export $(grep -v '^#' .env.versions | xargs) 2>/dev/null || true
 
     echo "Backup Service Status:"
-    docker compose ps backup 2>/dev/null || docker ps --filter "name=${BACKUP_CONTAINER}" --format "table {{.Names}}\t{{.Status}}"
+    docker compose ps backup 2>/dev/null || docker ps --filter "label=com.biliboard.service=backup" --format "table {{.Names}}\t{{.Status}}"
     echo ""
     echo "Next scheduled backups (crontab):"
-    docker exec ${BACKUP_CONTAINER} crontab -l 2>/dev/null || echo "Unable to read crontab"
+    if [ -n "$container" ]; then
+        docker exec "$container" crontab -l 2>/dev/null || echo "Unable to read crontab"
+    else
+        echo "Backup container not running"
+    fi
 }
 
 show_logs() {
     cd "${COMPOSE_DIR}"
     export $(grep -v '^#' .env.versions | xargs) 2>/dev/null || true
 
-    docker compose logs --tail=50 backup 2>/dev/null || docker logs --tail=50 ${BACKUP_CONTAINER}
+    local container
+    container=$(get_backup_container)
+    docker compose logs --tail=50 backup 2>/dev/null || {
+        if [ -n "$container" ]; then
+            docker logs --tail=50 "$container"
+        else
+            echo "Backup container not found"
+        fi
+    }
 }
 
 case "${1:-help}" in

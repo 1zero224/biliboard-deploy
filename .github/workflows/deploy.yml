@@ -113,10 +113,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for name in biliboard-backend biliboard-frontend biliboard-prometheus \
-                      biliboard-grafana biliboard-node-exporter biliboard-backup; do
-            docker rm -f "$name" 2>/dev/null || true
-          done
+          # Remove any orphaned containers from previous deployments using labels
+          containers=$(docker ps -aq -f "label=com.biliboard.project=true" 2>/dev/null || true)
+          if [ -n "$containers" ]; then
+            echo "Removing orphaned biliboard containers..."
+            echo "$containers" | xargs -r docker rm -f 2>/dev/null || true
+          fi
 
       - name: Apply update
         shell: bash
