@@ -263,8 +263,8 @@ jobs:
 
           TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
 
-          gh pr edit "${{ steps.pr-check.outputs.pr_number }}" \
-            --body "## Release Candidate
+          BODY=$(cat <<EOF
+          ## Release Candidate
 
           This PR aggregates image updates from CI pipelines.
 
@@ -280,7 +280,11 @@ jobs:
           ---
           ⚠️ **After merge**, the Deploy workflow will run on the production runner with environment protection.
 
-          _Last updated: ${TIMESTAMP}_"
+          _Last updated: ${TIMESTAMP}_
+          EOF
+          )
+
+          gh pr edit "${{ steps.pr-check.outputs.pr_number }}" --body "${BODY}"
 
           # Add comment for audit trail
           gh pr comment "${{ steps.pr-check.outputs.pr_number }}" \
