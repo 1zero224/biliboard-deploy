@@ -103,27 +103,11 @@ jobs:
           set -euo pipefail
           docker compose pull
 
-      - name: Stop existing containers
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker compose down --remove-orphans || true
-
-      - name: Cleanup conflicting containers
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Remove any orphaned containers from previous deployments using labels
-          containers=$(docker ps -aq -f "label=com.biliboard.project=true" 2>/dev/null || true)
-          if [ -n "$containers" ]; then
-            echo "Removing orphaned biliboard containers..."
-            echo "$containers" | xargs -r docker rm -f 2>/dev/null || true
-          fi
-
       - name: Apply update
         shell: bash
         run: |
           set -euo pipefail
+          # Incremental update: only restarts services with image changes
           docker compose up -d --remove-orphans
 
       - name: Health check
