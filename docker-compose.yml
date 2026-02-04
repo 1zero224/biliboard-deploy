@@ -47,8 +47,7 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - /etc/letsencrypt/live/1zero.me:/etc/nginx/ssl:ro
-      - /etc/letsencrypt/archive/1zero.me:/etc/letsencrypt/archive/1zero.me:ro
+      - /etc/ssl/biliboard:/etc/nginx/ssl:ro
       - nginx-logs:/var/log/nginx
     depends_on:
       backend:
