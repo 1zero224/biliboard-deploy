@@ -1,107 +1,68 @@
 # Biliboard Deploy Repository
 
-GitOps 部署仓库 - 通过修改 `.env.versions` 触发自动部署。
+GitOps 部署仓库：以 `.env.versions` 作为生产环境“期望状态”（镜像引用使用 digest 固定）。
+
+生产发布推荐采用 **Promotion → Deploy** 两阶段：
+
+1. **Promotion（人工选择版本）**：手动触发 `Promote (Prepare Deploy PR)` 工作流，生成一个更新 `.env.versions` 的 PR（同时更新前后端，避免“半更新窗口”）。
+2. **Deploy（生产审批 + 实际上线）**：PR 合并到 `master` 后触发 `Deploy` 工作流，在生产服务器上的 **GitHub self-hosted runner** 上执行 `docker compose pull/up`。该 job 绑定 `environment: production`，可在 GitHub Environments 中配置 required reviewers 作为上线审批。
+
+详细步骤见 `biliboard-deploy/DEPLOYMENT.md`。
 
 ## 快速开始
 
-### 服务器配置
+### 服务器配置（Self-hosted runner）
 
-1. **安装 webhook 工具**
-```bash
-# Ubuntu/Debian
-sudo apt-get install webhook
-
-# 或从 GitHub 下载
-# https://github.com/adnanh/webhook/releases
-```
-
-2. **部署脚本和配置**
-```bash
-sudo mkdir -p /opt/biliboard-deploy
-sudo cp -r . /opt/biliboard-deploy/
-sudo chmod +x /opt/biliboard-deploy/scripts/deploy-webhook.sh
-```
-
-3. **配置 Secrets 文件**
-```bash
-# 创建 secrets 文件 (chmod 600)
-sudo cat > /etc/biliboard-deploy.env << 'EOF'
-WEBHOOK_SECRET=your-webhook-secret
-GITHUB_PAT=ghp_xxxxxxxxxxxx
-GITHUB_REPO=1zero224/biliboard-deploy
-GHCR_USER=1zero224
-GHCR_TOKEN=<YOUR_GHCR_PAT>
-DEPLOY_DIR=/opt/biliboard-deploy
-EOF
-sudo chmod 600 /etc/biliboard-deploy.env
-```
-
-4. **更新 webhook-config.json**
-```bash
-# 替换占位符为实际 secret
-sudo sed -i 's/REPLACE_WITH_YOUR_SECRET/your-webhook-secret/' /opt/biliboard-deploy/scripts/webhook-config.json
-```
-
-5. **启动服务**
-```bash
-sudo cp scripts/deploy-webhook.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable deploy-webhook
-sudo systemctl start deploy-webhook
-```
-
-6. **配置 Nginx 反向代理 (推荐)**
-```nginx
-location /hooks/ {
-    proxy_pass http://127.0.0.1:9000;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-}
-```
+1. 安装 Docker + Docker Compose v2（确保 `docker compose` 可用）
+2. 创建 runner 用户并加入 docker 组（使 workflow 能执行 Docker 命令）
+3. 仓库 `Settings → Actions → Runners → New self-hosted runner`，按 GitHub 指引在生产服务器安装并注册 runner
+4. 给 runner 添加 label：`biliboard-prod`（与 `biliboard-deploy/.github/workflows/deploy.yml` 的 `runs-on` 保持一致）
+5. 确保服务器可访问 `ghcr.io`，并安装 `curl`（用于健康检查）
 
 ## GitHub Secrets 配置
 
-### Backend/Frontend 仓库
-| Secret | 用途 |
-|--------|-----|
-| `DEPLOY_REPO_TOKEN` | Fine-grained PAT，仅 `biliboard-deploy` 仓库的 `Contents: Read/Write` + `Pull requests: Read/Write` |
+### Environments: production（推荐）
+
+在 Deploy 仓库 `Settings → Environments → production`：
+
+- 开启 `Required reviewers`（实现“生产必须人工审批后上线”）
+- 可选配置 Variables / Secrets（例如 `HTTP_PORT`、`HTTPS_PORT`、`MQTT_HOST`、`MQTT_PORT` 等），供 `docker compose` 变量替换与健康检查使用
 
 ### Deploy 仓库
-| Secret | 用途 |
-|--------|-----|
-| `WEBHOOK_SECRET` | 验证 webhook 请求 |
-| `DEPLOY_WEBHOOK_URL` | 服务器 webhook 地址，如 `https://your-server/hooks/deploy` |
+- 默认无需额外 Secrets（使用 `GITHUB_TOKEN` 拉取 GHCR 镜像并更新 Deployment Status）
+- 若 GHCR 镜像为私有且默认权限不足，可添加只读 token（`packages:read`）并在 workflow 中替换登录凭据（默认未启用）
 
 ## 工作流程
 
 ```
 1. 开发者 push 代码到 backend/frontend
 2. CI 构建镜像并推送到 GHCR
-3. CI 自动创建 PR 更新 .env.versions
-4. 维护者合并 PR
-5. Deploy workflow 发送 webhook
-6. 服务器拉取新镜像并滚动更新
-7. 健康检查 → 回传 Deployment Status
+3. 手动触发 deploy 仓库 Promote 工作流，生成 PR 更新 .env.versions（同时更新前后端）
+4. 审核并合并 PR
+5. Deploy workflow 在 production 环境等待人工审批
+6. 生产服务器上的 self-hosted runner 执行 `docker compose pull/up`
+7. 健康检查 → 更新 GitHub Deployment Status
 ```
 
-## 手动部署
+## 手动 Promotion（推荐）
 
-```bash
-# 触发部署
-cd /opt/biliboard-deploy
-git pull
-docker compose pull
-docker compose up -d
-```
+到 deploy 仓库 `Actions → Promote (Prepare Deploy PR)`：
+
+- 从前后端 CI 的 job summary 复制 `Full ref`（含 digest）
+- 填入 `backend_ref` / `frontend_ref`，运行后会自动创建一个 promotion PR
 
 ## 回滚
 
 ```bash
-# 方法 1: Git revert
+# 推荐：Git revert promotion PR
 git revert HEAD
 git push
 
-# 方法 2: 手动指定版本
-vim .env.versions  # 修改为旧版本
+# 或：手动指定旧 digest
+vim .env.versions  # 修改为旧版本的 BACKEND_REF / FRONTEND_REF
 git add . && git commit -m "rollback" && git push
 ```
+
+## Legacy: 服务器 webhook
+
+仓库中 `scripts/deploy-webhook.*` 与 `scripts/webhook-config.json` 为旧方案遗留文件（服务器入站 webhook），已不再由 GitHub Actions 使用。

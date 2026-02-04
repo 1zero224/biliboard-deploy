@@ -1,0 +1,25 @@
+name: Update dotenv key
+description: Update a single KEY=VALUE entry in a dotenv-style file (e.g. .env.versions)
+
+inputs:
+  file:
+    description: Path to dotenv file
+    required: false
+    default: .env.versions
+  key:
+    description: Key to update (e.g. BACKEND_REF)
+    required: true
+  value:
+    description: Value to set
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$GITHUB_ACTION_PATH/update_env_versions.py" \
+          --file "${{ inputs.file }}" \
+          --key "${{ inputs.key }}" \
+          --value "${{ inputs.value }}"

@@ -37,7 +37,7 @@ update_github_status() {
         -H "Authorization: token $GITHUB_PAT" \
         -H "Accept: application/vnd.github.v3+json" \
         "https://api.github.com/repos/$GITHUB_REPO/deployments/$deployment_id/statuses" \
-        -d "{\"state\":\"$state\",\"description\":\"$description\"}" || log "WARNING: Failed to update GitHub status""
+        -d "{\"state\":\"$state\",\"description\":\"$description\"}" || log "WARNING: Failed to update GitHub status"
 }
 
 # Secure parsing of .env.versions (whitelist keys only)
@@ -78,8 +78,8 @@ do_deploy() {
     fi
 
     # Pull latest config
-    git fetch origin main
-    git reset --hard origin/main
+    git fetch origin master
+    git reset --hard origin/master
 
     # Load version config securely
     parse_env_versions .env.versions

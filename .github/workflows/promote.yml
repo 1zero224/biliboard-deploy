@@ -1,0 +1,73 @@
+name: Promote (Prepare Deploy PR)
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend_ref:
+        description: Full backend image ref incl. digest (e.g. ghcr.io/<owner>/biliboard-backend:<tag>@sha256:...)
+        required: true
+        type: string
+      frontend_ref:
+        description: Full frontend image ref incl. digest (e.g. ghcr.io/<owner>/biliboard-frontend:<tag>@sha256:...)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: promote-production
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Create promotion PR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for ref in "${{ inputs.backend_ref }}" "${{ inputs.frontend_ref }}"; do
+            if [[ "$ref" != ghcr.io/*@sha256:* ]]; then
+              echo "Invalid image ref (must include @sha256:): $ref" >&2
+              exit 1
+            fi
+          done
+
+      - name: Update backend ref
+        uses: ./.github/actions/update-env-versions
+        with:
+          file: .env.versions
+          key: BACKEND_REF
+          value: ${{ inputs.backend_ref }}
+
+      - name: Update frontend ref
+        uses: ./.github/actions/update-env-versions
+        with:
+          file: .env.versions
+          key: FRONTEND_REF
+          value: ${{ inputs.frontend_ref }}
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: promote images"
+          title: "Promote images"
+          body: |
+            ## Promotion
+
+            This PR updates production image references (pinned by digest):
+
+            - Backend: `${{ inputs.backend_ref }}`
+            - Frontend: `${{ inputs.frontend_ref }}`
+
+            After merge, the `Deploy` workflow will run on the production runner with environment protection.
+          branch: promote/${{ github.run_id }}
+          base: master
+          labels: |
+            deployment
+            promotion
