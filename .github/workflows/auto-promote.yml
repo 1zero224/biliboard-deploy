@@ -255,19 +255,22 @@ jobs:
         if: steps.check-changes.outputs.has_changes == 'true' && steps.pr-check.outputs.pr_exists == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BACKEND_REF: ${{ steps.fetch.outputs.backend_ref }}
+          FRONTEND_REF: ${{ steps.fetch.outputs.frontend_ref }}
         shell: bash
         run: |
           set -euo pipefail
 
+          TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+
           gh pr edit "${{ steps.pr-check.outputs.pr_number }}" \
-            --body "$(cat <<'EOF'
-          ## Release Candidate
+            --body "## Release Candidate
 
           This PR aggregates image updates from CI pipelines.
 
           ### Current Image References
-          - **Backend**: `${{ steps.fetch.outputs.backend_ref }}`
-          - **Frontend**: `${{ steps.fetch.outputs.frontend_ref }}`
+          - **Backend**: \`${BACKEND_REF}\`
+          - **Frontend**: \`${FRONTEND_REF}\`
 
           ### How it works
           - Each CI build triggers an update to this PR
@@ -277,9 +280,7 @@ jobs:
           ---
           ⚠️ **After merge**, the Deploy workflow will run on the production runner with environment protection.
 
-          _Last updated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')_
-          EOF
-          )"
+          _Last updated: ${TIMESTAMP}_"
 
           # Add comment for audit trail
           gh pr comment "${{ steps.pr-check.outputs.pr_number }}" \
