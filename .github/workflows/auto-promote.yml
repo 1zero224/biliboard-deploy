@@ -246,9 +246,7 @@ jobs:
           EOF
           )" \
             --head "${{ env.RC_BRANCH }}" \
-            --base master \
-            --label "deployment" \
-            --label "release-candidate")
+            --base master)
 
           echo "### ✅ PR Created" >> "$GITHUB_STEP_SUMMARY"
           echo "- **URL**: ${PR_URL}" >> "$GITHUB_STEP_SUMMARY"
