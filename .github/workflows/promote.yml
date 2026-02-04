@@ -4,21 +4,28 @@ on:
   workflow_dispatch:
     inputs:
       backend_ref:
-        description: Full backend image ref incl. digest (e.g. ghcr.io/<owner>/biliboard-backend:<tag>@sha256:...)
-        required: true
+        description: "(可选) 后端镜像 ref，留空自动获取最新"
+        required: false
         type: string
+        default: ""
       frontend_ref:
-        description: Full frontend image ref incl. digest (e.g. ghcr.io/<owner>/biliboard-frontend:<tag>@sha256:...)
-        required: true
+        description: "(可选) 前端镜像 ref，留空自动获取最新"
+        required: false
         type: string
+        default: ""
 
 permissions:
   contents: write
   pull-requests: write
+  packages: read
 
 concurrency:
   group: promote-production
   cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: 1zero224
 
 jobs:
   promote:
@@ -27,13 +34,59 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate inputs
+      - name: Fetch latest image digests
+        id: fetch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          for ref in "${{ inputs.backend_ref }}" "${{ inputs.frontend_ref }}"; do
+          
+          get_latest_digest() {
+            local package=$1
+            local tag=${2:-main}
+            
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/users/${{ env.OWNER }}/packages/container/${package}/versions" \
+              --jq "[.[] | select(.metadata.container.tags | index(\"${tag}\"))] | .[0].name" \
+            | head -1
+          }
+          
+          # Backend
+          if [[ -n "${{ inputs.backend_ref }}" ]]; then
+            BACKEND_REF="${{ inputs.backend_ref }}"
+            echo "Using user-provided backend ref"
+          else
+            DIGEST=$(get_latest_digest "biliboard-backend" "main")
+            BACKEND_REF="${{ env.REGISTRY }}/${{ env.OWNER }}/biliboard-backend:main@${DIGEST}"
+            echo "Auto-fetched backend ref"
+          fi
+          
+          # Frontend
+          if [[ -n "${{ inputs.frontend_ref }}" ]]; then
+            FRONTEND_REF="${{ inputs.frontend_ref }}"
+            echo "Using user-provided frontend ref"
+          else
+            DIGEST=$(get_latest_digest "biliboard-frontend" "main")
+            FRONTEND_REF="${{ env.REGISTRY }}/${{ env.OWNER }}/biliboard-frontend:main@${DIGEST}"
+            echo "Auto-fetched frontend ref"
+          fi
+          
+          echo "backend_ref=${BACKEND_REF}" >> "$GITHUB_OUTPUT"
+          echo "frontend_ref=${FRONTEND_REF}" >> "$GITHUB_OUTPUT"
+          
+          echo "### 📦 Image References" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Backend**: \`${BACKEND_REF}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Frontend**: \`${FRONTEND_REF}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Validate refs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for ref in "${{ steps.fetch.outputs.backend_ref }}" "${{ steps.fetch.outputs.frontend_ref }}"; do
             if [[ "$ref" != ghcr.io/*@sha256:* ]]; then
-              echo "Invalid image ref (must include @sha256:): $ref" >&2
+              echo "::error::Invalid image ref (must include @sha256:): $ref"
               exit 1
             fi
           done
@@ -43,14 +96,14 @@ jobs:
         with:
           file: .env.versions
           key: BACKEND_REF
-          value: ${{ inputs.backend_ref }}
+          value: ${{ steps.fetch.outputs.backend_ref }}
 
       - name: Update frontend ref
         uses: ./.github/actions/update-env-versions
         with:
           file: .env.versions
           key: FRONTEND_REF
-          value: ${{ inputs.frontend_ref }}
+          value: ${{ steps.fetch.outputs.frontend_ref }}
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
@@ -62,10 +115,10 @@ jobs:
 
             This PR updates production image references (pinned by digest):
 
-            - Backend: `${{ inputs.backend_ref }}`
-            - Frontend: `${{ inputs.frontend_ref }}`
+            - Backend: `${{ steps.fetch.outputs.backend_ref }}`
+            - Frontend: `${{ steps.fetch.outputs.frontend_ref }}`
 
-            After merge, the `Deploy` workflow will run on the production runner with environment protection.
+            After merge, the Deploy workflow will run on the production runner with environment protection.
           branch: promote/${{ github.run_id }}
           base: master
           labels: |

@@ -99,6 +99,12 @@ jobs:
           set -euo pipefail
           docker compose pull
 
+      - name: Stop existing containers
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose down --remove-orphans || true
+
       - name: Apply update
         shell: bash
         run: |
