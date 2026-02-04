@@ -62,7 +62,3 @@ git push
 vim .env.versions  # 修改为旧版本的 BACKEND_REF / FRONTEND_REF
 git add . && git commit -m "rollback" && git push
 ```
-
-## Legacy: 服务器 webhook
-
-仓库中 `scripts/deploy-webhook.*` 与 `scripts/webhook-config.json` 为旧方案遗留文件（服务器入站 webhook），已不再由 GitHub Actions 使用。

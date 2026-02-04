@@ -61,6 +61,8 @@ jobs:
         run: |
           set -euo pipefail
 
+          declare -A found_keys
+
           while IFS='=' read -r key value; do
             [[ "$key" =~ ^#.*$ || -z "${key// /}" ]] && continue
 
@@ -74,11 +76,12 @@ jobs:
                   exit 1
                 fi
                 echo "$key=$value" >> "$GITHUB_ENV"
+                found_keys["$key"]=1
                 ;;
             esac
           done < .env.versions
 
-          if [[ -z "${BACKEND_REF:-}" || -z "${FRONTEND_REF:-}" ]]; then
+          if [[ -z "${found_keys[BACKEND_REF]:-}" || -z "${found_keys[FRONTEND_REF]:-}" ]]; then
             echo "Missing BACKEND_REF or FRONTEND_REF in .env.versions" >&2
             exit 1
           fi
