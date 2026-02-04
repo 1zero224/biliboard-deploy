@@ -114,7 +114,7 @@ jobs:
         run: |
           set -euo pipefail
           for name in biliboard-backend biliboard-frontend biliboard-prometheus \
-                      biliboard-grafana biliboard-node-exporter; do
+                      biliboard-grafana biliboard-node-exporter biliboard-backup; do
             docker rm -f "$name" 2>/dev/null || true
           done
 
