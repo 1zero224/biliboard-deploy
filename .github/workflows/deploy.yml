@@ -5,6 +5,10 @@ on:
     branches: [master]
     paths:
       - '.env.versions'
+      - 'docker-compose.yml'
+      - 'nginx/**'
+      - 'prometheus/**'
+      - 'grafana/**'
   workflow_dispatch:
 
 permissions:
@@ -104,6 +108,15 @@ jobs:
         run: |
           set -euo pipefail
           docker compose down --remove-orphans || true
+
+      - name: Cleanup conflicting containers
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in biliboard-backend biliboard-frontend biliboard-prometheus \
+                      biliboard-grafana biliboard-node-exporter; do
+            docker rm -f "$name" 2>/dev/null || true
+          done
 
       - name: Apply update
         shell: bash

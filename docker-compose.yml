@@ -101,6 +101,34 @@ services:
       - biliboard-net
 
   # ============================================
+  # Database Backup Service
+  # ============================================
+  backup:
+    image: alpine:3.19
+    container_name: biliboard-backup
+    restart: unless-stopped
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        apk add --no-cache sqlite
+        echo "${BACKUP_SCHEDULE:-0 */6 * * *} /scripts/backup.sh" | crontab -
+        crond -f -l 2
+    environment:
+      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 */6 * * *}
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
+      - TZ=Asia/Shanghai
+    volumes:
+      - backend-data:/app/data:ro
+      - backup-data:/backups
+      - ./scripts/backup.sh:/scripts/backup.sh:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - biliboard-net
+
+  # ============================================
   # Node Exporter - Host Metrics (Optional)
   # ============================================
   node-exporter:
@@ -135,6 +163,8 @@ volumes:
   backend-uploads:
     driver: local
   backend-config:
+    driver: local
+  backup-data:
     driver: local
   prometheus-data:
     driver: local
