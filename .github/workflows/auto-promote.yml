@@ -259,31 +259,37 @@ jobs:
           FRONTEND_REF: ${{ steps.fetch.outputs.frontend_ref }}
         shell: bash
         run: |
-          set -euo pipefail
+          set -euxo pipefail
 
-          TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          TIMESTAMP="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 
-          cat > /tmp/pr-body.md <<EOF
-## Release Candidate
+          cat > /tmp/pr-body.md <<-EOF
+            ## Release Candidate
 
-This PR aggregates image updates from CI pipelines.
+            This PR aggregates image updates from CI pipelines.
 
-### Current Image References
-- **Backend**: \`${BACKEND_REF}\`
-- **Frontend**: \`${FRONTEND_REF}\`
+            ### Current Image References
+            - **Backend**: \`${BACKEND_REF}\`
+            - **Frontend**: \`${FRONTEND_REF}\`
 
-### How it works
-- Each CI build triggers an update to this PR
-- Multiple updates are aggregated into a single PR
-- Merge when ready to deploy to production
+            ### How it works
+            - Each CI build triggers an update to this PR
+            - Multiple updates are aggregated into a single PR
+            - Merge when ready to deploy to production
 
----
-⚠️ **After merge**, the Deploy workflow will run on the production runner with environment protection.
+            ---
+            ⚠️ **After merge**, the Deploy workflow will run on the production runner with environment protection.
 
-_Last updated: ${TIMESTAMP}_
-EOF
+            _Last updated: ${TIMESTAMP}_
+          EOF
+
+          echo "===== generated file tail ====="
+          nl -ba /tmp/pr-body.md | tail -n 30
 
           gh pr edit "${{ steps.pr-check.outputs.pr_number }}" --body-file /tmp/pr-body.md
+
+          echo "===== PR body tail after edit ====="
+          gh pr view "${{ steps.pr-check.outputs.pr_number }}" --json body -q .body | tail -n 30
 
           # Add comment for audit trail
           gh pr comment "${{ steps.pr-check.outputs.pr_number }}" \
